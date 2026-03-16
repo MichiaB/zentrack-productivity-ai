@@ -3,9 +3,33 @@
 const STORAGE_KEY = 'zentrack-habits-v1';
 
 const initialProjects = [
-  { id: 'P-201', name: 'Product Launch Site', owner: 'Maya', progress: 72, health: 'On track' },
-  { id: 'P-198', name: 'Mobile App v2', owner: 'Jordan', progress: 54, health: 'At risk' },
-  { id: 'P-176', name: 'Sales Dashboard Revamp', owner: 'Nia', progress: 88, health: 'On track' }
+  {
+    id: 'P-201',
+    name: 'Product Launch Site',
+    owner: 'Maya',
+    progress: 72,
+    health: 'On track',
+    raidStatus: 'Green',
+    progressNote: 'Launch landing pages approved and QA pass rate is improving.'
+  },
+  {
+    id: 'P-198',
+    name: 'Mobile App v2',
+    owner: 'Jordan',
+    progress: 54,
+    health: 'At risk',
+    raidStatus: 'Red',
+    progressNote: 'Android crash fix is blocked by dependency upgrade.'
+  },
+  {
+    id: 'P-176',
+    name: 'Sales Dashboard Revamp',
+    owner: 'Nia',
+    progress: 88,
+    health: 'On track',
+    raidStatus: 'Green',
+    progressNote: 'Visualization polish and rollout checklist nearly complete.'
+  }
 ];
 
 const weeklyThroughput = [
@@ -122,6 +146,16 @@ const previewModal = document.getElementById('preview-modal');
 const previewTitle = document.getElementById('preview-title');
 const previewBody = document.getElementById('preview-body');
 const previewClose = document.getElementById('preview-close');
+const projectModal = document.getElementById('project-modal');
+const projectModalTitle = document.getElementById('project-modal-title');
+const projectModalClose = document.getElementById('project-modal-close');
+const projectForm = document.getElementById('project-form');
+const projectNameInput = document.getElementById('project-name-input');
+const projectOwnerInput = document.getElementById('project-owner-input');
+const projectProgressInput = document.getElementById('project-progress-input');
+const projectRaidInput = document.getElementById('project-raid-input');
+const projectSummaryInput = document.getElementById('project-summary-input');
+const projectCancel = document.getElementById('project-cancel');
 const addProjectBtn = document.getElementById('add-project');
 const removeProjectBtn = document.getElementById('remove-project');
 const addDeadlineBtn = document.getElementById('add-deadline');
@@ -141,6 +175,7 @@ const zeniChatForm = document.getElementById('zeni-chat-form');
 const zeniChatText = document.getElementById('zeni-chat-text');
 
 let activePreviewType = null;
+let activeProjectId = null;
 const chatState = {
   opened: false,
   greeted: false,
@@ -400,14 +435,27 @@ function renderStats() {
 }
 
 function renderProjects() {
+  const raidColorClass = {
+    Green: 'green',
+    Amber: 'amber',
+    Red: 'red'
+  };
+
   projectGrid.innerHTML = state.projects.map(project => `
     <div class="project-card">
       <h4>${project.name}</h4>
-      <p>${project.owner} • ${project.health}</p>
-      <div class="progress-track">
-        <div class="progress-fill" style="width:${project.progress}%"></div>
+      <div class="project-meta">
+        <p>${project.owner}</p>
+        <span class="raid-pill ${raidColorClass[project.raidStatus] || 'green'}">${project.raidStatus || 'Green'}</span>
       </div>
-      <p>${project.progress}% complete</p>
+      <div class="progress-track">
+        <div class="progress-fill" style="width:${project.progress}%; ${getRaidProgressColor(project.raidStatus)}"></div>
+      </div>
+      <p class="project-summary">${project.progressNote || 'No progress note yet.'}</p>
+      <div class="project-card-foot">
+        <p>${project.progress}% complete</p>
+        <button class="btn ghost btn-sm" data-project-action="edit" data-id="${project.id}" type="button">Edit</button>
+      </div>
     </div>
   `).join('');
 
@@ -963,25 +1011,107 @@ function bindPreviewModal() {
   });
 }
 
-function addProject() {
-  const nextId = `P-${String(200 + state.projects.length + 1)}`;
-  const names = ['Client Portal Refresh', 'Internal Ops Console', 'Growth Experiment Hub', 'Support Automation'];
-  const owners = ['Avery', 'Kai', 'Noah', 'Leila'];
-  const name = names[state.projects.length % names.length];
-  const owner = owners[state.projects.length % owners.length];
-  const progress = 20 + ((state.projects.length * 17) % 61);
+function nextProjectId() {
+  const maxNumeric = state.projects.reduce((max, project) => {
+    const match = String(project.id).match(/P-(\d+)/i);
+    if (!match) return max;
+    return Math.max(max, Number(match[1]));
+  }, 0);
 
-  state.projects.push({
-    id: nextId,
+  return `P-${String(maxNumeric + 1).padStart(3, '0')}`;
+}
+
+function normalizeRaidStatus(rawRaid) {
+  const normalized = String(rawRaid || '').trim().toLowerCase();
+  if (normalized === 'green') return 'Green';
+  if (normalized === 'amber' || normalized === 'yellow') return 'Amber';
+  if (normalized === 'red') return 'Red';
+  return '';
+}
+
+function healthFromRaid(raidStatus) {
+  return raidStatus === 'Red' ? 'At risk' : 'On track';
+}
+
+function getRaidProgressColor(raidStatus) {
+  if (raidStatus === 'Red') return 'background:#d86c6c;';
+  if (raidStatus === 'Amber') return 'background:#d9a54d;';
+  return 'background:#48b680;';
+}
+
+function openProjectModal(mode, project = null) {
+  if (!projectModal || !projectForm) return;
+
+  const isEdit = mode === 'edit' && project;
+  activeProjectId = isEdit ? project.id : null;
+  projectModalTitle.textContent = isEdit ? 'Edit Project' : 'Create Project';
+
+  projectNameInput.value = isEdit ? project.name : '';
+  projectOwnerInput.value = isEdit ? project.owner : '';
+  projectProgressInput.value = isEdit ? String(project.progress) : '0';
+  projectRaidInput.value = isEdit ? normalizeRaidStatus(project.raidStatus || '') || 'Green' : 'Green';
+  projectSummaryInput.value = isEdit ? (project.progressNote || '') : '';
+
+  projectModal.classList.remove('hidden');
+  projectModal.setAttribute('aria-hidden', 'false');
+  projectNameInput.focus();
+}
+
+function closeProjectModal() {
+  if (!projectModal || !projectForm) return;
+  activeProjectId = null;
+  projectForm.reset();
+  projectRaidInput.value = 'Green';
+  projectModal.classList.add('hidden');
+  projectModal.setAttribute('aria-hidden', 'true');
+}
+
+function projectFormToData() {
+  const name = String(projectNameInput.value || '').trim();
+  const owner = String(projectOwnerInput.value || '').trim();
+  const progress = Number(projectProgressInput.value);
+  const raidStatus = normalizeRaidStatus(projectRaidInput.value);
+  const progressNote = String(projectSummaryInput.value || '').trim();
+
+  if (!name) {
+    window.alert('Project name is required.');
+    return null;
+  }
+
+  if (!owner) {
+    window.alert('Assigned to is required.');
+    return null;
+  }
+
+  if (Number.isNaN(progress) || progress < 0 || progress > 100) {
+    window.alert('Percentage completed must be between 0 and 100.');
+    return null;
+  }
+
+  if (!raidStatus) {
+    window.alert('Please select a valid RAID status color.');
+    return null;
+  }
+
+  return {
     name,
     owner,
     progress,
-    health: progress >= 60 ? 'On track' : 'At risk'
-  });
+    raidStatus,
+    progressNote,
+    health: healthFromRaid(raidStatus)
+  };
+}
 
-  renderStats();
-  renderProjects();
-  refreshOpenPreview();
+function addProject() {
+  openProjectModal('create');
+}
+
+function editProject(projectId) {
+  const project = state.projects.find(item => item.id === projectId);
+  if (!project) return;
+
+  openProjectModal('edit', project);
 }
 
 function removeProject() {
@@ -1124,6 +1254,66 @@ function registerTaskActions() {
   });
 }
 
+function registerProjectActions() {
+  projectGrid.addEventListener('click', event => {
+    const button = event.target.closest('button[data-project-action]');
+    if (!button) return;
+
+    const action = button.dataset.projectAction;
+    const projectId = button.dataset.id;
+    if (action === 'edit') {
+      editProject(projectId);
+    }
+  });
+}
+
+function bindProjectModal() {
+  if (!projectModal || !projectForm) return;
+
+  projectModal.addEventListener('click', event => {
+    const target = event.target;
+    if (target.closest('[data-close-project-modal="true"]')) {
+      closeProjectModal();
+    }
+  });
+
+  projectModalClose.addEventListener('click', closeProjectModal);
+  projectCancel.addEventListener('click', closeProjectModal);
+
+  projectForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const formData = projectFormToData();
+    if (!formData) return;
+
+    if (activeProjectId) {
+      const project = state.projects.find(item => item.id === activeProjectId);
+      if (!project) return;
+      project.name = formData.name;
+      project.owner = formData.owner;
+      project.progress = formData.progress;
+      project.raidStatus = formData.raidStatus;
+      project.progressNote = formData.progressNote;
+      project.health = formData.health;
+    } else {
+      state.projects.push({
+        id: nextProjectId(),
+        ...formData
+      });
+    }
+
+    closeProjectModal();
+    renderStats();
+    renderProjects();
+    refreshOpenPreview();
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !projectModal.classList.contains('hidden')) {
+      closeProjectModal();
+    }
+  });
+}
+
 function bindTopActions() {
   taskFilter.addEventListener('change', event => {
     state.filter = event.target.value;
@@ -1195,6 +1385,8 @@ function renderAll() {
 bindTopActions();
 registerTaskActions();
 registerDeadlineActions();
+registerProjectActions();
 bindPreviewModal();
+bindProjectModal();
 bindZeniChat();
 renderAll();

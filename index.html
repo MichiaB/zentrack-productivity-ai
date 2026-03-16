@@ -182,6 +182,46 @@
     </section>
   </div>
 
+  <div class="preview-modal hidden" id="project-modal" aria-hidden="true">
+    <div class="preview-backdrop" data-close-project-modal="true"></div>
+    <section class="preview-dialog project-dialog" role="dialog" aria-modal="true" aria-labelledby="project-modal-title">
+      <div class="preview-head">
+        <h3 id="project-modal-title">Create Project</h3>
+        <button class="preview-close" id="project-modal-close" aria-label="Close project editor">Close</button>
+      </div>
+      <form class="project-form" id="project-form">
+        <label class="project-field" for="project-name-input">
+          <span>Project Name</span>
+          <input id="project-name-input" name="projectName" type="text" placeholder="Name of project" required />
+        </label>
+        <label class="project-field" for="project-owner-input">
+          <span>Assigned To</span>
+          <input id="project-owner-input" name="projectOwner" type="text" placeholder="Who is this assigned to?" required />
+        </label>
+        <label class="project-field" for="project-progress-input">
+          <span>Percentage Completed</span>
+          <input id="project-progress-input" name="projectProgress" type="number" min="0" max="100" step="1" placeholder="0-100" required />
+        </label>
+        <label class="project-field" for="project-raid-input">
+          <span>RAID Status Color</span>
+          <select id="project-raid-input" name="projectRaid" required>
+            <option value="Green">Green - On Track</option>
+            <option value="Amber">Amber - Needs Attention</option>
+            <option value="Red">Red - At Risk</option>
+          </select>
+        </label>
+        <label class="project-field project-field-full" for="project-summary-input">
+          <span>Project Progress Notes</span>
+          <textarea id="project-summary-input" name="projectSummary" rows="3" placeholder="Progress of the project"></textarea>
+        </label>
+        <div class="project-form-actions">
+          <button class="btn ghost" type="button" id="project-cancel">Cancel</button>
+          <button class="btn primary" type="submit" id="project-save">Save Project</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
   <section class="zeni-widget" id="zeni-widget" aria-label="Zeni assistant">
     <button class="zeni-fab" id="zeni-fab" aria-expanded="false" aria-controls="zeni-chat-panel" aria-label="Open Zeni assistant">
       <span class="zeni-glow"></span>
@@ -233,6 +273,6 @@
     </div>
   </section>
 
-  <script src="./static/app.js?v=6"></script>
+  <script src="./static/app.js?v=7"></script>
 </body>
 </html>

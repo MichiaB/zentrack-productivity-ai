@@ -427,6 +427,107 @@ h1 {
   font-size: 0.79rem;
   margin-top: 4px;
 }
+.project-meta {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.raid-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+}
+
+.raid-pill.green {
+  color: #1c5f45;
+  background: #d7efe3;
+  border: 1px solid #b6dec9;
+}
+
+.raid-pill.amber {
+  color: #825316;
+  background: #f7ead0;
+  border: 1px solid #efce98;
+}
+
+.raid-pill.red {
+  color: #7a3535;
+  background: #f8dcda;
+  border: 1px solid #efb2ad;
+}
+
+.project-summary {
+  margin-top: 6px;
+  color: var(--ink-soft);
+  min-height: 34px;
+}
+
+.project-card-foot {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-card-foot p {
+  margin: 0;
+}
+.project-dialog {
+  width: min(620px, calc(100% - 24px));
+}
+
+.project-form {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-field {
+  display: grid;
+  gap: 5px;
+}
+
+.project-field span {
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.project-field input,
+.project-field select,
+.project-field textarea {
+  border: 1px solid #d0dfdb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fbfdfc;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.83rem;
+}
+
+.project-field textarea {
+  resize: vertical;
+}
+
+.project-field-full {
+  grid-column: 1 / -1;
+}
+
+.project-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 .progress-track,
 .bar {
@@ -1019,6 +1120,9 @@ body.focus-mode #tasks {
   .landing,
   .content-grid {
     grid-template-columns: 1fr;
+  .project-form {
+    grid-template-columns: 1fr;
+  }
   }
 
   .stats-grid {
