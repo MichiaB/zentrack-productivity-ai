@@ -1,0 +1,134 @@
+[
+  {
+    "id": "T-001",
+    "title": "Set up project repository and CI/CD pipeline",
+    "description": "Initialize Git repo, configure GitHub Actions for build, test, and deploy.",
+    "status": "In Progress",
+    "assigned_to": "DevOps Engineer",
+    "priority": "High",
+    "story_points": 5,
+    "dependencies": [],
+    "tags": ["infrastructure", "devops"]
+  },
+  {
+    "id": "T-002",
+    "title": "Design database schema",
+    "description": "Define tables, relationships, and indexes for the core data models.",
+    "status": "Not Started",
+    "assigned_to": "Backend Dev",
+    "priority": "High",
+    "story_points": 8,
+    "dependencies": ["T-001"],
+    "tags": ["backend", "database"]
+  },
+  {
+    "id": "T-003",
+    "title": "Build REST API – User Authentication",
+    "description": "Implement register, login, logout, and JWT refresh endpoints.",
+    "status": "Not Started",
+    "assigned_to": "Backend Dev",
+    "priority": "Critical",
+    "story_points": 13,
+    "dependencies": ["T-002"],
+    "tags": ["backend", "auth", "security"]
+  },
+  {
+    "id": "T-004",
+    "title": "Build REST API – Task CRUD",
+    "description": "Endpoints for creating, reading, updating, and deleting project tasks.",
+    "status": "Not Started",
+    "assigned_to": "Backend Dev",
+    "priority": "High",
+    "story_points": 8,
+    "dependencies": ["T-002", "T-003"],
+    "tags": ["backend", "api"]
+  },
+  {
+    "id": "T-005",
+    "title": "Design UI/UX mockups",
+    "description": "Create Figma wireframes for dashboard, task board, and settings screens.",
+    "status": "In Progress",
+    "assigned_to": "UI/UX Designer",
+    "priority": "High",
+    "story_points": 8,
+    "dependencies": [],
+    "tags": ["design", "frontend"]
+  },
+  {
+    "id": "T-006",
+    "title": "Implement frontend – Dashboard",
+    "description": "Build the main project overview dashboard using React.",
+    "status": "Not Started",
+    "assigned_to": "Frontend Dev",
+    "priority": "High",
+    "story_points": 13,
+    "dependencies": ["T-004", "T-005"],
+    "tags": ["frontend", "react"]
+  },
+  {
+    "id": "T-007",
+    "title": "Implement frontend – Task Board (Kanban)",
+    "description": "Drag-and-drop Kanban board synced with the Task API.",
+    "status": "Not Started",
+    "assigned_to": "Frontend Dev",
+    "priority": "High",
+    "story_points": 13,
+    "dependencies": ["T-004", "T-005"],
+    "tags": ["frontend", "react"]
+  },
+  {
+    "id": "T-008",
+    "title": "Integrate AI assistant (ZenTrack)",
+    "description": "Embed the AI analysis endpoint into the dashboard UI.",
+    "status": "Not Started",
+    "assigned_to": "Full-Stack Dev",
+    "priority": "Medium",
+    "story_points": 8,
+    "dependencies": ["T-006", "T-007"],
+    "tags": ["ai", "integration"]
+  },
+  {
+    "id": "T-009",
+    "title": "Write unit and integration tests",
+    "description": "Achieve ≥80% code coverage for API and frontend components.",
+    "status": "Not Started",
+    "assigned_to": "QA Engineer",
+    "priority": "Medium",
+    "story_points": 13,
+    "dependencies": ["T-003", "T-004"],
+    "tags": ["testing", "qa"]
+  },
+  {
+    "id": "T-010",
+    "title": "Performance & security audit",
+    "description": "Load test APIs, run OWASP ZAP scan, fix identified vulnerabilities.",
+    "status": "Not Started",
+    "assigned_to": "QA Engineer",
+    "priority": "High",
+    "story_points": 8,
+    "dependencies": ["T-009"],
+    "tags": ["security", "performance", "qa"]
+  },
+  {
+    "id": "T-011",
+    "title": "Write user documentation",
+    "description": "Onboarding guide, feature walkthroughs, and API reference docs.",
+    "status": "Not Started",
+    "assigned_to": "Technical Writer",
+    "priority": "Low",
+    "story_points": 5,
+    "dependencies": ["T-006", "T-007"],
+    "tags": ["docs"]
+  },
+  {
+    "id": "T-012",
+    "title": "Production deployment",
+    "description": "Deploy to cloud (AWS/GCP), configure domains, SSL, and monitoring.",
+    "status": "Not Started",
+    "assigned_to": "DevOps Engineer",
+    "priority": "Critical",
+    "story_points": 8,
+    "dependencies": ["T-009", "T-010"],
+    "tags": ["devops", "infrastructure"]
+  }
+]
