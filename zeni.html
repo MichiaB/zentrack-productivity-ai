@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZenTrack | Zeni AI Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./static/style.css?v=10" />
+</head>
+<body>
+  <div class="noise-layer" aria-hidden="true"></div>
+
+  <main class="app-shell" id="zeni-home">
+    <aside class="left-rail" aria-label="Main navigation">
+      <div class="rail-logo-wrap">
+        <div class="rail-logo">ZT</div>
+        <span class="rail-brand">ZenTrack</span>
+      </div>
+      <nav class="rail-nav">
+        <a href="./index.html#dashboard" class="rail-icon" aria-label="Dashboard"><span>◉</span><span>Dashboard</span></a>
+        <a href="./index.html#tasks" class="rail-icon" aria-label="Tasks"><span>◌</span><span>Tasks</span></a>
+        <a href="./index.html#calendar" class="rail-icon" aria-label="Calendar"><span>◎</span><span>Calendar</span></a>
+        <a href="#zeni" class="rail-icon" aria-label="Zeni"><span>◈</span><span>Zeni</span></a>
+      </nav>
+    </aside>
+
+    <section class="workspace-board">
+      <header class="board-header">
+        <div>
+          <p class="eyebrow">AI-guided execution</p>
+          <h1>Zeni AI Guide</h1>
+          <p class="board-subtitle">Your dedicated AI workspace for proactive planning, risk analysis, and daily execution guidance.</p>
+        </div>
+        <div class="board-tools">
+          <button class="btn ghost" id="focus-toggle" type="button">Focus Mode</button>
+          <div class="focus-pill" id="focus-pill">Focus Off</div>
+          <a class="btn secondary" href="./index.html#dashboard">Back to Dashboard</a>
+        </div>
+      </header>
+
+      <section class="dashboard" id="dashboard">
+        <div class="command-grid zeni-only">
+          <article class="card zeni-hub" id="zeni" aria-labelledby="zeni-title">
+            <div class="card-head card-head-stack">
+              <div>
+                <p class="section-kicker">AI assistant</p>
+                <h3 id="zeni-title">Zeni AI Guide</h3>
+              </div>
+              <span class="chip chip-soft" id="zeni-confidence">Confidence 84%</span>
+            </div>
+
+            <div class="zeni-stage">
+              <div class="zeni-orb-wrap" aria-hidden="true">
+                <span class="zeni-orb-lines"></span>
+                <span class="zeni-orb"></span>
+              </div>
+              <div class="zeni-copy">
+                <h4>Your proactive work guide</h4>
+                <p class="zeni-intro" id="zeni-intro"></p>
+              </div>
+            </div>
+
+            <div class="zeni-actions zeni-primary-actions">
+              <button class="btn primary" id="zeni-review-deadlines" type="button">Review deadlines</button>
+              <button class="btn secondary" id="zeni-start-focus" type="button">Start focus session</button>
+              <button class="btn ghost" id="zeni-add-task" type="button">Add task</button>
+              <button class="btn ghost" id="refresh-insights" type="button">Refresh insights</button>
+              <button class="btn ghost" id="accept-plan" type="button">Accept today plan</button>
+            </div>
+
+            <div class="task-capture zeni-prompt">
+              <input id="zeni-quick-input" type="text" placeholder="What should I do next?" />
+              <button class="btn secondary" id="zeni-quick-submit" type="button">Ask Zeni</button>
+            </div>
+
+            <div class="zeni-panel-grid">
+              <div class="hero-panel">
+                <div class="hero-panel-head">
+                  <h4>Today with Zeni</h4>
+                  <button class="btn ghost btn-sm" id="start-day" type="button">Open task workspace</button>
+                </div>
+                <ul id="hero-plan"></ul>
+              </div>
+
+              <div>
+                <div class="control-buttons" id="control-buttons">
+                  <button class="control-btn" data-preview="projects">Projects</button>
+                  <button class="control-btn" data-preview="tasks">Tasks</button>
+                  <button class="control-btn" data-preview="calendar">Calendar</button>
+                  <button class="control-btn" data-preview="analytics">Analytics</button>
+                  <button class="control-btn" data-preview="zeni">Zeni</button>
+                </div>
+                <div class="insight-grid" id="insight-grid"></div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div class="preview-modal hidden" id="preview-modal" aria-hidden="true">
+    <div class="preview-backdrop" data-close-preview="true"></div>
+    <section class="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+      <div class="preview-head">
+        <h3 id="preview-title">Preview</h3>
+        <button class="preview-close" id="preview-close" aria-label="Close preview">Close</button>
+      </div>
+      <div class="preview-body" id="preview-body"></div>
+    </section>
+  </div>
+
+  <section class="zeni-widget" id="zeni-widget" aria-label="Zeni assistant">
+    <button class="zeni-fab" id="zeni-fab" aria-expanded="false" aria-controls="zeni-chat-panel" aria-label="Open Zeni assistant">
+      <span class="zeni-glow"></span>
+      <span class="zeni-face" aria-hidden="true">
+        <svg class="zeni-avatar" viewBox="0 0 64 64" role="img" aria-label="Zeni avatar symbol">
+          <defs>
+            <linearGradient id="zeniCore" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#dffff7" />
+              <stop offset="100%" stop-color="#8cead2" />
+            </linearGradient>
+          </defs>
+          <circle cx="32" cy="32" r="10" fill="url(#zeniCore)" />
+          <circle cx="32" cy="32" r="20" fill="none" stroke="rgba(225,255,248,0.7)" stroke-width="2" />
+          <circle cx="32" cy="32" r="27" fill="none" stroke="rgba(225,255,248,0.35)" stroke-width="1.6" />
+          <circle cx="32" cy="12" r="3.5" fill="#e8fff9" />
+          <circle cx="49" cy="42" r="3.5" fill="#e8fff9" />
+          <circle cx="15" cy="42" r="3.5" fill="#e8fff9" />
+          <path d="M32 22 L32 12 M39 36 L49 42 M25 36 L15 42" stroke="rgba(232,255,249,0.9)" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </span>
+      <span class="zeni-pulse"></span>
+      <span class="zeni-badge" id="zeni-badge">0</span>
+    </button>
+
+    <div class="zeni-chat-panel hidden" id="zeni-chat-panel" role="dialog" aria-modal="false" aria-labelledby="zeni-chat-title">
+      <div class="zeni-chat-head">
+        <div>
+          <h3 id="zeni-chat-title">Zeni Project Assistant</h3>
+          <p>Ask about priorities, risks, deadlines, and next actions.</p>
+        </div>
+        <button class="preview-close" id="zeni-chat-close" aria-label="Close Zeni assistant">Close</button>
+      </div>
+
+      <div class="zeni-chat-notifications" id="zeni-chat-notifications"></div>
+
+      <div class="zeni-chat-suggestions" id="zeni-chat-suggestions">
+        <button data-chat-suggestion="What should I work on first?">Top Priority</button>
+        <button data-chat-suggestion="Show overdue items">Overdue Risks</button>
+        <button data-chat-suggestion="What is due this week?">Due This Week</button>
+        <button data-chat-suggestion="Any project management suggestions?">Zeni Suggestions</button>
+      </div>
+
+      <div class="zeni-chat-messages" id="zeni-chat-messages"></div>
+
+      <form class="zeni-chat-input" id="zeni-chat-form">
+        <input id="zeni-chat-text" type="text" placeholder="Ask Zeni a project question..." autocomplete="off" />
+        <button type="submit" class="btn primary">Send</button>
+      </form>
+    </div>
+  </section>
+
+  <script src="./static/app.js?v=10"></script>
+</body>
+</html>

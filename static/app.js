@@ -139,6 +139,11 @@ const chartWrap = document.getElementById('chart-wrap');
 const analyticsNotes = document.getElementById('analytics-notes');
 const insightGrid = document.getElementById('insight-grid');
 const heroPlan = document.getElementById('hero-plan');
+const timelineDays = document.getElementById('timeline-days');
+const timelineGrid = document.getElementById('timeline-grid');
+const timelineAiSummary = document.getElementById('timeline-ai-summary');
+const timelineAiDetail = document.getElementById('timeline-ai-detail');
+const riskAlert = document.getElementById('risk-alert');
 const zeniIntro = document.getElementById('zeni-intro');
 const zeniConfidence = document.getElementById('zeni-confidence');
 const controlButtons = document.getElementById('control-buttons');
@@ -164,6 +169,26 @@ const focusPill = document.getElementById('focus-pill');
 const aiPrioritizeBtn = document.getElementById('ai-prioritize');
 const nlTaskInput = document.getElementById('nl-task-input');
 const nlTaskAdd = document.getElementById('nl-task-add');
+const timelineAddTaskBtn = document.getElementById('timeline-add-task');
+const timelineTaskModal = document.getElementById('timeline-task-modal');
+const timelineTaskModalClose = document.getElementById('timeline-task-modal-close');
+const timelineTaskForm = document.getElementById('timeline-task-form');
+const timelineTaskNameInput = document.getElementById('timeline-task-name-input');
+const timelineTaskProjectInput = document.getElementById('timeline-task-project-input');
+const timelineTaskDueInput = document.getElementById('timeline-task-due-input');
+const timelineTaskPriorityInput = document.getElementById('timeline-task-priority-input');
+const timelineTaskRaidInput = document.getElementById('timeline-task-raid-input');
+const timelineTaskEstimateInput = document.getElementById('timeline-task-estimate-input');
+const timelineTaskStatusInput = document.getElementById('timeline-task-status-input');
+const timelineTaskCancel = document.getElementById('timeline-task-cancel');
+const timelineTaskDetailModal = document.getElementById('timeline-task-detail-modal');
+const timelineTaskDetailClose = document.getElementById('timeline-task-detail-close');
+const timelineTaskDetailBody = document.getElementById('timeline-task-detail-body');
+const zeniQuickInput = document.getElementById('zeni-quick-input');
+const zeniQuickSubmit = document.getElementById('zeni-quick-submit');
+const zeniReviewDeadlinesBtn = document.getElementById('zeni-review-deadlines');
+const zeniStartFocusBtn = document.getElementById('zeni-start-focus');
+const zeniAddTaskBtn = document.getElementById('zeni-add-task');
 const zeniFab = document.getElementById('zeni-fab');
 const zeniBadge = document.getElementById('zeni-badge');
 const zeniChatPanel = document.getElementById('zeni-chat-panel');
@@ -176,6 +201,8 @@ const zeniChatText = document.getElementById('zeni-chat-text');
 
 let activePreviewType = null;
 let activeProjectId = null;
+let selectedTimelineTaskId = null;
+let selectedCalendarDate = null;
 const chatState = {
   opened: false,
   greeted: false,
@@ -328,6 +355,12 @@ function parseNaturalLanguageTask(text) {
 }
 
 function addTaskRecord(taskLike) {
+  const raidStatus = String(taskLike.raidStatus || '').trim();
+  const tags = Array.isArray(taskLike.tags) ? [...taskLike.tags] : ['manual'];
+  if (raidStatus) {
+    tags.push(`raid-${raidStatus.toLowerCase()}`);
+  }
+
   const newTask = {
     id: nextTaskId(),
     title: taskLike.title,
@@ -336,7 +369,8 @@ function addTaskRecord(taskLike) {
     status: taskLike.status || 'Not Started',
     dueDate: taskLike.dueDate || '2026-03-25',
     estimateHours: Number(taskLike.estimateHours) || 2,
-    tags: Array.isArray(taskLike.tags) ? taskLike.tags : ['manual']
+    raidStatus: raidStatus || 'Green',
+    tags
   };
 
   state.tasks.push(newTask);
@@ -392,11 +426,22 @@ function getAdaptiveInsights() {
 }
 
 function getTodayPlan() {
-  return state.tasks
+  const topTasks = state.tasks
     .filter(task => task.status !== 'Done')
     .sort((a, b) => priorityScore(b) - priorityScore(a))
-    .slice(0, 3)
-    .map(task => `${task.id}: ${task.title} (${task.priority}, due ${formatDate(task.dueDate)})`);
+    .slice(0, 2);
+
+  const weeklyDeadlines = getDueThisWeekTasks().length;
+  const morningFocus = (state.habits.completedByHour['9'] || 0) + (state.habits.completedByHour['10'] || 0) + (state.habits.completedByHour['11'] || 0);
+  const afternoonFocus = (state.habits.completedByHour['14'] || 0) + (state.habits.completedByHour['15'] || 0) + (state.habits.completedByHour['16'] || 0);
+  const bestWindow = morningFocus >= afternoonFocus ? 'morning' : 'afternoon';
+
+  return [
+    topTasks[0] ? `Start with ${topTasks[0].title} — it is your top priority today.` : 'Your priority queue is clear right now.',
+    weeklyDeadlines ? `You have ${weeklyDeadlines} deadline${weeklyDeadlines > 1 ? 's' : ''} approaching this week.` : 'No urgent deadlines are pressing this week.',
+    topTasks[1] ? `Follow with ${topTasks[1].title} once the first lane is stable.` : null,
+    `You work best in the ${bestWindow} — schedule deep work there first.`
+  ].filter(Boolean);
 }
 
 function formatDate(dateString) {
@@ -406,35 +451,207 @@ function formatDate(dateString) {
   });
 }
 
+function completionRatio(task) {
+  if (task.status === 'Done') return 100;
+  if (task.status === 'In Progress') return 62;
+  return 18;
+}
+
+function taskDueDate(task) {
+  const raw = new Date(`${task.dueDate}T09:00:00`);
+  if (Number.isNaN(raw.getTime())) {
+    return new Date('2026-03-15T09:00:00');
+  }
+  return raw;
+}
+
+function mondayAnchor(dateLike) {
+  const base = new Date(dateLike);
+  base.setHours(9, 0, 0, 0);
+
+  const day = base.getDay();
+  if (day === 0) {
+    base.setDate(base.getDate() + 1);
+  } else if (day === 6) {
+    base.setDate(base.getDate() + 2);
+  } else {
+    base.setDate(base.getDate() - (day - 1));
+  }
+
+  return base;
+}
+
+function getTimelineDays() {
+  const openTasks = state.tasks.filter(task => task.status !== 'Done');
+  const earliestDue = openTasks.length
+    ? openTasks
+      .map(taskDueDate)
+      .sort((a, b) => a.getTime() - b.getTime())[0]
+    : new Date();
+
+  const days = [];
+  const cursor = mondayAnchor(earliestDue);
+
+  while (days.length < 10) {
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) {
+      days.push(new Date(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
+}
+
+function getTimelineTasks(limit = 5) {
+  return state.tasks
+    .filter(task => task.status !== 'Done')
+    .sort((a, b) => {
+      const dueDiff = taskDueDate(a).getTime() - taskDueDate(b).getTime();
+      if (dueDiff !== 0) return dueDiff;
+      return aiTaskScore(b) - aiTaskScore(a);
+    })
+    .slice(0, limit);
+}
+
+function timelineEndIndex(task, days) {
+  const dueDate = new Date(`${task.dueDate}T09:00:00`);
+  const firstUpcomingIndex = days.findIndex(day => day.getTime() >= dueDate.getTime());
+  if (firstUpcomingIndex !== -1) return firstUpcomingIndex;
+
+  if (dueDate.getTime() <= days[0].getTime()) return 0;
+  return days.length - 1;
+}
+
+function focusScoreValue() {
+  const focusMinutes = state.habits.focusMinutesWeek + Math.floor(getCurrentFocusElapsedSeconds() / 60);
+  return Math.min(99, 54 + Math.round(focusMinutes / 3) + state.habits.acceptedPlans * 2);
+}
+
+function getBestWorkWindow() {
+  const morningFocus = (state.habits.completedByHour['9'] || 0) + (state.habits.completedByHour['10'] || 0) + (state.habits.completedByHour['11'] || 0);
+  const afternoonFocus = (state.habits.completedByHour['14'] || 0) + (state.habits.completedByHour['15'] || 0) + (state.habits.completedByHour['16'] || 0);
+  return morningFocus >= afternoonFocus ? 'morning' : 'afternoon';
+}
+
+function getTimelineAiData(task) {
+  const dueIn = dayDiff(task.dueDate);
+  const completion = completionRatio(task);
+  const raidStatus = String(task.raidStatus || '').toLowerCase();
+  const isCritical = task.priority === 'Critical' || raidStatus === 'red';
+  const isHigh = task.priority === 'High' || isCritical;
+  const bestWindow = getBestWorkWindow();
+
+  let visualState = 'on-track';
+  if (dueIn < 0) {
+    visualState = 'delayed';
+  } else if (isCritical || raidStatus === 'amber' || (dueIn <= 1 && completion < 70) || (task.status === 'Not Started' && dueIn <= 2)) {
+    visualState = 'at-risk';
+  }
+
+  const tags = [];
+  if (isHigh) tags.push('Top Priority');
+  if (dueIn <= 2 && dueIn >= 0) tags.push('Due Soon');
+  if (visualState === 'at-risk') tags.push('At Risk');
+  if (visualState === 'delayed') tags.push('Falling Behind');
+  if (completion >= 70 && visualState === 'on-track') tags.push('Good Progress');
+
+  const primaryInsight = visualState === 'delayed'
+    ? 'This task is behind schedule - recover it first to avoid timeline drag.'
+    : visualState === 'at-risk'
+      ? 'This task is at risk of delay. Move it into your next focus block.'
+      : 'Start this task first for strong momentum and clearer dependencies.';
+
+  const personalizedInsight = dueIn <= 3
+    ? `You usually complete similar work faster in the ${bestWindow}.`
+    : task.status === 'Not Started' && !task.dueDate
+      ? 'You tend to delay tasks without deadlines. Add a date to protect momentum.'
+      : 'You complete shorter tasks faster when they are batched together.';
+
+  const recommendation = visualState === 'delayed'
+    ? 'Suggested action: re-scope this task and complete a minimum deliverable today.'
+    : visualState === 'at-risk'
+      ? 'Suggested action: allocate 60-90 minutes of deep work and clear blockers first.'
+      : 'Suggested action: keep this in the first lane to preserve on-time delivery.';
+
+  const showFloatingCard = visualState !== 'on-track' || isHigh;
+
+  return {
+    visualState,
+    tags,
+    primaryInsight,
+    personalizedInsight,
+    recommendation,
+    showFloatingCard,
+    isCritical,
+    isHigh,
+    completion,
+    dueIn
+  };
+}
+
 function isValidDateInput(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T09:00:00`).getTime());
 }
 
 function renderStats() {
-  const completed = state.tasks.filter(t => t.status === 'Done').length;
-  const activeProjects = state.projects.length;
-  const overdue = state.tasks.filter(t => dayDiff(t.dueDate) < 0 && t.status !== 'Done').length;
-  const dueSoon = state.tasks.filter(t => {
-    const d = dayDiff(t.dueDate);
-    return d >= 0 && d <= 3 && t.status !== 'Done';
+  if (!statsGrid) return;
+
+  const weeklyTasks = getDueThisWeekTasks().length;
+  const upcomingDeadlines = state.deadlines.filter(item => {
+    const d = dayDiff(item.date);
+    return d >= 0 && d <= 7;
   }).length;
+  const averageProgress = state.projects.length
+    ? Math.round(state.projects.reduce((sum, project) => sum + Number(project.progress || 0), 0) / state.projects.length)
+    : 0;
+  const overdue = state.tasks.filter(t => dayDiff(t.dueDate) < 0 && t.status !== 'Done').length;
+  const focusScore = focusScoreValue();
 
   const cards = [
-    { label: 'Active Projects', value: activeProjects, preview: 'active-projects' },
-    { label: 'Tasks Completed', value: `${completed}/${state.tasks.length}`, preview: 'tasks-completed' },
-    { label: 'Overdue Items', value: overdue, preview: 'overdue-items' },
-    { label: 'Due This Week', value: dueSoon, preview: 'due-this-week' }
+    {
+      label: 'Tasks This Week',
+      value: weeklyTasks,
+      meta: overdue ? `${overdue} overdue item${overdue > 1 ? 's' : ''} need recovery` : 'Priority queue is stable',
+      meter: Math.min(100, weeklyTasks * 12),
+      preview: 'due-this-week'
+    },
+    {
+      label: 'Upcoming Deadlines',
+      value: upcomingDeadlines,
+      meta: upcomingDeadlines ? 'Next 7 days across active work' : 'No immediate date pressure detected',
+      meter: Math.min(100, upcomingDeadlines * 14),
+      preview: 'calendar'
+    },
+    {
+      label: 'Progress %',
+      value: `${averageProgress}%`,
+      meta: `${state.projects.length} active project${state.projects.length === 1 ? '' : 's'} tracked live`,
+      meter: averageProgress,
+      preview: 'active-projects'
+    },
+    {
+      label: 'Focus Score',
+      value: `${focusScore}%`,
+      meta: `Built from ${state.habits.acceptedPlans} accepted plans and focus time`,
+      meter: focusScore,
+      preview: 'analytics'
+    }
   ];
 
   statsGrid.innerHTML = cards.map(card => `
     <button class="stat-card ${card.preview ? 'stat-button' : ''}" ${card.preview ? `data-preview="${card.preview}"` : ''}>
       <p>${card.label}</p>
       <h4>${card.value}</h4>
+      <div class="stat-meta">${card.meta}</div>
+      <div class="mini-meter"><span style="width:${card.meter}%"></span></div>
     </button>
   `).join('');
 }
 
 function renderProjects() {
+  if (!projectGrid) return;
+
   const raidColorClass = {
     Green: 'green',
     Amber: 'amber',
@@ -473,6 +690,8 @@ function applyFilter(list) {
 }
 
 function renderTasks() {
+  if (!taskList) return;
+
   const filtered = applyFilter(state.tasks);
   const ranked = state.sortMode === 'ai' ? rankTasksByAi(filtered) : filtered;
 
@@ -506,6 +725,8 @@ function renderTasks() {
 }
 
 function renderCalendar() {
+  if (!calendarGrid || !deadlineList) return;
+
   const start = new Date('2026-03-15T00:00:00');
   const days = Array.from({ length: 14 }).map((_, idx) => {
     const date = new Date(start);
@@ -517,38 +738,247 @@ function renderCalendar() {
     const dayText = date.toISOString().slice(0, 10);
     const dayDeadlines = state.deadlines.filter(item => item.date === dayText);
     const urgent = dayDeadlines.some(item => item.priority === 'Critical' || item.priority === 'High') ? 'urgent' : '';
+    const selected = selectedCalendarDate === dayText ? 'selected' : '';
+    const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+    const shortDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    const lines = dayDeadlines.slice(0, 2).map(item => {
+      const priorityClass = String(item.priority || 'medium').toLowerCase();
+      return `<li class="calendar-task-line ${priorityClass}"><span class="calendar-task-dot" aria-hidden="true"></span><span>${item.title}</span></li>`;
+    }).join('');
+
     return `
-      <div class="calendar-day ${urgent}">
-        <h5>${date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</h5>
-        <ul>${dayDeadlines.slice(0, 2).map(item => `<li>${item.id}</li>`).join('') || '<li>-</li>'}</ul>
-      </div>
+      <button type="button" class="calendar-day ${urgent} ${selected}" data-calendar-date="${dayText}" aria-pressed="${selected ? 'true' : 'false'}">
+        <div class="calendar-day-head">
+          <h5><span class="calendar-weekday">${weekday}</span><span class="calendar-date">${shortDate}</span></h5>
+          <span class="calendar-count">${dayDeadlines.length}</span>
+        </div>
+        <ul>${lines || '<li class="calendar-empty">No deadlines</li>'}</ul>
+      </button>
     `;
   }).join('');
 
-  const upcoming = state.deadlines
-    .sort((a, b) => dayDiff(a.date) - dayDiff(b.date))
-    .slice(0, 5);
+  const upcomingSource = selectedCalendarDate
+    ? state.deadlines.filter(item => item.date === selectedCalendarDate)
+    : state.deadlines;
 
-  deadlineList.innerHTML = upcoming.map(item => `
+  const upcoming = [...upcomingSource]
+    .sort((a, b) => dayDiff(a.date) - dayDiff(b.date))
+    .slice(0, selectedCalendarDate ? 8 : 5);
+
+  const toolbarLabel = selectedCalendarDate
+    ? `Showing deadlines for ${formatDate(selectedCalendarDate)}`
+    : 'Upcoming deadlines';
+
+  const toolbar = `
+    <div class="deadline-toolbar">
+      <strong>${toolbarLabel}</strong>
+      ${selectedCalendarDate ? '<button data-deadline-action="clear-filter" type="button">Show all</button>' : ''}
+    </div>
+  `;
+
+  deadlineList.innerHTML = toolbar + upcoming.map(item => {
+    const d = dayDiff(item.date);
+    const dueLabel = d < 0 ? `${Math.abs(d)} day(s) overdue` : d === 0 ? 'Due today' : `Due in ${d} day(s)`;
+    const priorityClass = String(item.priority || 'medium').toLowerCase();
+    return `
     <div class="deadline-item">
       <div>
         <span>${item.title}</span>
-        <div class="task-meta">${item.project} • ${item.priority}</div>
+        <div class="task-meta">${item.project}</div>
       </div>
       <div class="deadline-actions">
-        <strong>${formatDate(item.date)}</strong>
+        <span class="priority ${priorityClass}">${item.priority}</span>
+        <span class="deadline-date-chip"><span class="deadline-date-main">${formatDate(item.date)}</span><span class="deadline-date-meta">${dueLabel}</span></span>
         <button data-deadline-action="edit" data-id="${item.id}">Edit</button>
         <button data-deadline-action="remove" data-id="${item.id}">Remove</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   if (!upcoming.length) {
-    deadlineList.innerHTML = '<p class="task-meta">No deadlines scheduled.</p>';
+    deadlineList.innerHTML = toolbar + '<p class="task-meta">No deadlines scheduled for this range.</p>';
   }
 }
 
+function renderTimeline() {
+  if (!timelineDays || !timelineGrid || !timelineAiSummary || !timelineAiDetail) return;
+
+  const days = getTimelineDays();
+  timelineDays.innerHTML = `
+    <span class="timeline-spacer">Task lanes</span>
+    ${days.map(day => `<span class="timeline-day">${day.toLocaleDateString('en-US', { weekday: 'short' })} ${day.toLocaleDateString('en-US', { day: 'numeric' })}</span>`).join('')}
+  `;
+
+  const timelineTasks = getTimelineTasks(5);
+  const aiSnapshot = timelineTasks.map(task => ({ task, ai: getTimelineAiData(task) }));
+
+  const dueSoonCount = aiSnapshot.filter(item => item.ai.tags.includes('Due Soon')).length;
+  const atRiskCount = aiSnapshot.filter(item => item.ai.visualState === 'at-risk' || item.ai.visualState === 'delayed').length;
+  const onTrackCount = aiSnapshot.filter(item => item.ai.visualState === 'on-track').length;
+  const onTrackPct = aiSnapshot.length ? Math.round((onTrackCount / aiSnapshot.length) * 100) : 100;
+
+  timelineAiSummary.innerHTML = `
+    <div class="timeline-ai-summary-item">
+      <span class="timeline-ai-icon" aria-hidden="true">+</span>
+      <div>
+        <strong>You have ${dueSoonCount} deadlines approaching this week.</strong>
+        <p>${atRiskCount} task${atRiskCount === 1 ? ' is' : 's are'} at risk of delay. ${onTrackPct}% of timeline lanes are on track.</p>
+      </div>
+    </div>
+    <div class="timeline-ai-summary-item muted">
+      <span class="timeline-ai-icon" aria-hidden="true">Z</span>
+      <div>
+        <strong>Zeni pattern:</strong>
+        <p>You are most productive in the ${getBestWorkWindow()} and finish short tasks faster in batches.</p>
+      </div>
+    </div>
+  `;
+
+  const selectedTask = timelineTasks.find(item => item.id === selectedTimelineTaskId);
+  if (selectedTask) {
+    const selectedAi = getTimelineAiData(selectedTask);
+    timelineAiDetail.classList.remove('hidden');
+    timelineAiDetail.innerHTML = `
+      <div class="timeline-ai-detail-head">
+        <h4>Zeni Recommendation - ${selectedTask.id}</h4>
+        <span class="chip">${selectedAi.visualState === 'on-track' ? 'On Track' : selectedAi.visualState === 'at-risk' ? 'At Risk' : 'Delayed'}</span>
+      </div>
+      <p><strong>${selectedTask.title}</strong> (${selectedTask.project})</p>
+      <p>${selectedAi.primaryInsight}</p>
+      <p>${selectedAi.personalizedInsight}</p>
+      <p>${selectedAi.recommendation}</p>
+    `;
+  } else {
+    timelineAiDetail.classList.add('hidden');
+    timelineAiDetail.innerHTML = '';
+  }
+
+  timelineGrid.innerHTML = timelineTasks.map(task => {
+    const endIndex = timelineEndIndex(task, days);
+    const span = Math.max(1, Math.min(4, Math.ceil(effortHours(task) / 2)));
+    const startIndex = Math.max(0, endIndex - span + 1);
+    const ai = getTimelineAiData(task);
+    const completion = ai.completion;
+    const priorityClass = String(task.priority || 'medium').toLowerCase();
+    const stateClass = `ai-${ai.visualState}`;
+    const highClass = ai.isHigh ? 'ai-high' : '';
+    const criticalClass = ai.isCritical ? 'ai-critical' : '';
+    const autoCardClass = ai.showFloatingCard ? 'auto-insight' : '';
+    const selectedClass = selectedTimelineTaskId === task.id ? 'is-selected' : '';
+
+    const tagMarkup = ai.tags
+      .slice(0, 3)
+      .map(tag => `<span class="timeline-ai-tag ${tag.toLowerCase().replace(/\s+/g, '-')}">${tag}</span>`)
+      .join('');
+
+    return `
+      <div class="timeline-row ${selectedClass}" data-task-id="${task.id}">
+        <div class="timeline-task-card">
+          <div class="timeline-task-top">
+            <div>
+              <strong>${task.title}</strong>
+              <p>${task.project} • ${task.priority} • ${task.status}</p>
+            </div>
+            <span class="priority ${priorityClass}">${task.priority}</span>
+          </div>
+          <div class="timeline-ai-tags">${tagMarkup || '<span class="timeline-ai-tag">Good Progress</span>'}</div>
+          <div class="timeline-progress-track">
+            <span class="timeline-progress-fill" style="width:${completion}%"></span>
+          </div>
+        </div>
+        <div class="timeline-track">
+          <div class="timeline-bar ${priorityClass} ${stateClass} ${highClass} ${criticalClass} ${autoCardClass}" style="grid-column:${startIndex + 1} / span ${span};" data-task-id="${task.id}" tabindex="0" role="button" aria-label="Open AI recommendation for ${task.title}">
+            ${ai.visualState !== 'on-track' || ai.isCritical ? '<span class="timeline-warning" aria-hidden="true">!</span>' : ''}
+            <strong>${task.id}</strong>
+            <div class="timeline-bar-meta">
+              <span>Due ${formatDate(task.dueDate)}</span>
+              <span>${completion}% complete</span>
+            </div>
+            <article class="timeline-zeni-card" role="note">
+              <h5>Zeni insight</h5>
+              <p>${ai.primaryInsight}</p>
+              <p>${ai.personalizedInsight}</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (!timelineTasks.length) {
+    timelineGrid.innerHTML = '<p class="task-meta">No task lanes to visualize right now.</p>';
+    timelineAiDetail.classList.add('hidden');
+    timelineAiSummary.innerHTML = '<p class="task-meta">No timeline insights available yet. Add tasks to activate Zeni timeline guidance.</p>';
+  }
+}
+
+function bindTimelineInteractions() {
+  if (!timelineGrid) return;
+
+  timelineGrid.addEventListener('click', event => {
+    const row = event.target.closest('.timeline-row[data-task-id]');
+    if (!row) return;
+    const taskId = row.dataset.taskId;
+    if (!taskId) return;
+
+    selectedTimelineTaskId = selectedTimelineTaskId === taskId ? null : taskId;
+    renderTimeline();
+    openTimelineTaskDetailModal(taskId);
+  });
+
+  timelineGrid.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const bar = event.target.closest('.timeline-bar[data-task-id]');
+    if (!bar) return;
+
+    event.preventDefault();
+    const taskId = bar.dataset.taskId;
+    selectedTimelineTaskId = selectedTimelineTaskId === taskId ? null : taskId;
+    renderTimeline();
+    openTimelineTaskDetailModal(taskId);
+  });
+}
+
+function renderRiskAlert() {
+  if (!riskAlert) return;
+
+  const atRiskProject = state.projects.find(project => String(project.health || '').toLowerCase() === 'at risk');
+  const overdue = getOverdueTasks();
+  const dueThisWeek = getDueThisWeekTasks();
+
+  let title = 'Flow is stable across the portfolio.';
+  let detail = 'Zeni recommends protecting your highest-value work block and keeping calendar review lightweight.';
+
+  if (atRiskProject) {
+    const linkedTask = state.tasks
+      .filter(task => task.project === atRiskProject.name && task.status !== 'Done')
+      .sort((a, b) => dayDiff(a.dueDate) - dayDiff(b.dueDate))[0];
+    title = `Project Risk: ${atRiskProject.name} is at risk of delay.`;
+    detail = linkedTask
+      ? `Consider reallocating effort to ${linkedTask.title}, which is due ${formatDate(linkedTask.dueDate)} and is currently ${linkedTask.status.toLowerCase()}.`
+      : 'The project is flagged red. Review staffing, blockers, and the next milestone before end of day.';
+  } else if (overdue.length) {
+    title = `Deadline Risk: ${overdue[0].title} is overdue.`;
+    detail = `Recover the overdue item first, then rebalance the ${dueThisWeek.length} other deadlines approaching this week.`;
+  } else if (dueThisWeek.length) {
+    title = `${dueThisWeek.length} deadlines are approaching this week.`;
+    detail = `Start with ${dueThisWeek[0].title} to protect your delivery window and keep downstream work clear.`;
+  }
+
+  riskAlert.innerHTML = `
+    <span class="risk-icon" aria-hidden="true">!</span>
+    <div>
+      <strong>${title}</strong>
+      <p>${detail}</p>
+    </div>
+  `;
+}
+
 function renderAnalytics() {
+  if (!chartWrap || !analyticsNotes) return;
+
   const max = Math.max(...weeklyThroughput.map(item => item.value));
   chartWrap.innerHTML = weeklyThroughput.map(item => `
     <div class="bar-row">
@@ -572,6 +1002,8 @@ function renderAnalytics() {
 }
 
 function renderZeni() {
+  if (!zeniIntro || !zeniConfidence || !insightGrid || !heroPlan) return;
+
   const insight = getAdaptiveInsights();
   zeniIntro.textContent = insight.intro;
   zeniConfidence.textContent = `Confidence ${insight.confidence}%`;
@@ -586,6 +1018,8 @@ function renderZeni() {
 }
 
 function appendChatMessage(role, text) {
+  if (!zeniChatMessages) return;
+
   const safeText = String(text || '').trim();
   if (!safeText) return;
   const article = document.createElement('article');
@@ -643,6 +1077,8 @@ function buildZeniNotifications() {
 }
 
 function renderZeniNotifications() {
+  if (!zeniChatNotifications || !zeniBadge) return;
+
   const notes = buildZeniNotifications();
   zeniChatNotifications.innerHTML = notes.map(note => `<div class="zeni-note">${note}</div>`).join('');
 
@@ -707,6 +1143,8 @@ function getCurrentFocusElapsedSeconds() {
 }
 
 function updateFocusPill() {
+  if (!focusPill) return;
+
   const completedNow = state.tasks.filter(task => task.status === 'Done').length;
 
   if (!state.focus.active) {
@@ -725,6 +1163,8 @@ function updateFocusPill() {
 }
 
 function setFocusMode(active) {
+  if (!focusToggle) return;
+
   if (active && !state.focus.active) {
     state.focus.active = true;
     state.focus.startedAtMs = Date.now();
@@ -762,6 +1202,8 @@ function setFocusMode(active) {
 }
 
 function openZeniChat() {
+  if (!zeniChatPanel || !zeniFab) return;
+
   zeniChatPanel.classList.remove('hidden');
   zeniFab.setAttribute('aria-expanded', 'true');
   chatState.opened = true;
@@ -773,10 +1215,12 @@ function openZeniChat() {
     chatState.greeted = true;
   }
 
-  zeniChatText.focus();
+  if (zeniChatText) zeniChatText.focus();
 }
 
 function closeZeniChat() {
+  if (!zeniChatPanel || !zeniFab) return;
+
   zeniChatPanel.classList.add('hidden');
   zeniFab.setAttribute('aria-expanded', 'false');
   chatState.opened = false;
@@ -792,7 +1236,7 @@ function submitZeniQuestion(question) {
 }
 
 function bindZeniChat() {
-  if (!zeniFab || !zeniChatPanel) return;
+  if (!zeniFab || !zeniChatPanel || !zeniChatClose || !zeniChatSuggestions || !zeniChatForm) return;
 
   zeniFab.addEventListener('click', () => {
     if (zeniChatPanel.classList.contains('hidden')) {
@@ -983,17 +1427,23 @@ function refreshOpenPreview() {
 }
 
 function bindPreviewModal() {
-  controlButtons.addEventListener('click', event => {
-    const button = event.target.closest('button[data-preview]');
-    if (!button) return;
-    openPreview(button.dataset.preview);
-  });
+  if (!previewModal || !previewClose || !previewBody || !previewTitle) return;
 
-  statsGrid.addEventListener('click', event => {
-    const button = event.target.closest('button[data-preview]');
-    if (!button) return;
-    openPreview(button.dataset.preview);
-  });
+  if (controlButtons) {
+    controlButtons.addEventListener('click', event => {
+      const button = event.target.closest('button[data-preview]');
+      if (!button) return;
+      openPreview(button.dataset.preview);
+    });
+  }
+
+  if (statsGrid) {
+    statsGrid.addEventListener('click', event => {
+      const button = event.target.closest('button[data-preview]');
+      if (!button) return;
+      openPreview(button.dataset.preview);
+    });
+  }
 
   previewModal.addEventListener('click', event => {
     const target = event.target;
@@ -1064,6 +1514,169 @@ function closeProjectModal() {
   projectRaidInput.value = 'Green';
   projectModal.classList.add('hidden');
   projectModal.setAttribute('aria-hidden', 'true');
+}
+
+function openTimelineTaskModal() {
+  if (!timelineTaskModal || !timelineTaskForm) return;
+
+  timelineTaskModal.classList.remove('hidden');
+  timelineTaskModal.setAttribute('aria-hidden', 'false');
+
+  if (timelineTaskDueInput) {
+    timelineTaskDueInput.value = '2026-03-25';
+  }
+  if (timelineTaskPriorityInput) timelineTaskPriorityInput.value = 'High';
+  if (timelineTaskRaidInput) timelineTaskRaidInput.value = 'Green';
+  if (timelineTaskEstimateInput) timelineTaskEstimateInput.value = '2';
+  if (timelineTaskStatusInput) timelineTaskStatusInput.value = 'Not Started';
+
+  if (timelineTaskNameInput) timelineTaskNameInput.focus();
+}
+
+function closeTimelineTaskModal() {
+  if (!timelineTaskModal || !timelineTaskForm) return;
+  timelineTaskForm.reset();
+  timelineTaskModal.classList.add('hidden');
+  timelineTaskModal.setAttribute('aria-hidden', 'true');
+}
+
+function timelineTaskFormToData() {
+  const title = String(timelineTaskNameInput?.value || '').trim();
+  const project = String(timelineTaskProjectInput?.value || '').trim();
+  const dueDate = String(timelineTaskDueInput?.value || '').trim();
+  const priority = String(timelineTaskPriorityInput?.value || 'High').trim();
+  const raidStatus = String(timelineTaskRaidInput?.value || 'Green').trim();
+  const status = String(timelineTaskStatusInput?.value || 'Not Started').trim();
+  const estimateHours = Number(timelineTaskEstimateInput?.value || 2);
+
+  if (!title) {
+    window.alert('Task name is required.');
+    return null;
+  }
+
+  if (!project) {
+    window.alert('Project name is required.');
+    return null;
+  }
+
+  if (!isValidDateInput(dueDate)) {
+    window.alert('Please choose a valid due date.');
+    return null;
+  }
+
+  if (Number.isNaN(estimateHours) || estimateHours < 1 || estimateHours > 24) {
+    window.alert('Estimated hours must be between 1 and 24.');
+    return null;
+  }
+
+  return {
+    title,
+    project,
+    dueDate,
+    priority,
+    raidStatus,
+    status,
+    estimateHours,
+    tags: ['manual-entry']
+  };
+}
+
+function bindTimelineTaskModal() {
+  if (!timelineTaskModal || !timelineTaskForm) return;
+
+  timelineTaskModal.addEventListener('click', event => {
+    const target = event.target;
+    if (target.closest('[data-close-timeline-task-modal="true"]')) {
+      closeTimelineTaskModal();
+    }
+  });
+
+  if (timelineTaskModalClose) timelineTaskModalClose.addEventListener('click', closeTimelineTaskModal);
+  if (timelineTaskCancel) timelineTaskCancel.addEventListener('click', closeTimelineTaskModal);
+
+  timelineTaskForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const taskData = timelineTaskFormToData();
+    if (!taskData) return;
+
+    const task = addTaskRecord(taskData);
+    selectedTimelineTaskId = task.id;
+    closeTimelineTaskModal();
+    renderAll();
+    appendChatMessage('bot', `Timeline task added: ${task.title} (${task.priority}) due ${formatDate(task.dueDate)}.`);
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !timelineTaskModal.classList.contains('hidden')) {
+      closeTimelineTaskModal();
+    }
+  });
+}
+
+function openTimelineTaskDetailModal(taskId) {
+  if (!timelineTaskDetailModal || !timelineTaskDetailBody) return;
+
+  const task = state.tasks.find(item => item.id === taskId);
+  if (!task) return;
+
+  const ai = getTimelineAiData(task);
+  const dueIn = ai.dueIn;
+  const dueLabel = dueIn < 0 ? `${Math.abs(dueIn)} day(s) overdue` : `Due in ${dueIn} day(s)`;
+  const raidStatus = task.raidStatus || 'Green';
+
+  timelineTaskDetailBody.innerHTML = `
+    <article class="preview-item">
+      <strong>${task.id} • ${task.title}</strong>
+      <p>${task.project} • ${task.priority} priority • ${task.status}</p>
+    </article>
+    <article class="preview-item">
+      <strong>Schedule Details</strong>
+      <p>Due date: ${formatDate(task.dueDate)} (${dueLabel})</p>
+      <p>Estimated effort: ${effortHours(task)}h</p>
+      <p>RAID status: ${raidStatus}</p>
+    </article>
+    <article class="preview-item">
+      <strong>Zeni Recommendation</strong>
+      <p>${ai.primaryInsight}</p>
+      <p>${ai.personalizedInsight}</p>
+      <p>${ai.recommendation}</p>
+    </article>
+    <article class="preview-item">
+      <strong>AI Labels</strong>
+      <p>${ai.tags.length ? ai.tags.join(' • ') : 'Good Progress'}</p>
+    </article>
+  `;
+
+  timelineTaskDetailModal.classList.remove('hidden');
+  timelineTaskDetailModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeTimelineTaskDetailModal() {
+  if (!timelineTaskDetailModal || !timelineTaskDetailBody) return;
+  timelineTaskDetailModal.classList.add('hidden');
+  timelineTaskDetailModal.setAttribute('aria-hidden', 'true');
+  timelineTaskDetailBody.innerHTML = '';
+}
+
+function bindTimelineTaskDetailModal() {
+  if (!timelineTaskDetailModal || !timelineTaskDetailBody) return;
+
+  timelineTaskDetailModal.addEventListener('click', event => {
+    const target = event.target;
+    if (target.closest('[data-close-timeline-task-detail-modal="true"]')) {
+      closeTimelineTaskDetailModal();
+    }
+  });
+
+  if (timelineTaskDetailClose) {
+    timelineTaskDetailClose.addEventListener('click', closeTimelineTaskDetailModal);
+  }
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !timelineTaskDetailModal.classList.contains('hidden')) {
+      closeTimelineTaskDetailModal();
+    }
+  });
 }
 
 function projectFormToData() {
@@ -1205,12 +1818,20 @@ function removeDeadline(deadlineId) {
 }
 
 function registerDeadlineActions() {
+  if (!deadlineList) return;
+
   deadlineList.addEventListener('click', event => {
     const button = event.target.closest('button[data-deadline-action]');
     if (!button) return;
 
     const action = button.dataset.deadlineAction;
     const deadlineId = button.dataset.id;
+
+    if (action === 'clear-filter') {
+      selectedCalendarDate = null;
+      renderCalendar();
+      return;
+    }
 
     if (action === 'edit') {
       editDeadline(deadlineId);
@@ -1223,7 +1844,23 @@ function registerDeadlineActions() {
   });
 }
 
+function bindCalendarInteractions() {
+  if (!calendarGrid) return;
+
+  calendarGrid.addEventListener('click', event => {
+    const button = event.target.closest('button[data-calendar-date]');
+    if (!button) return;
+
+    const date = button.dataset.calendarDate;
+    if (!date) return;
+    selectedCalendarDate = selectedCalendarDate === date ? null : date;
+    renderCalendar();
+  });
+}
+
 function registerTaskActions() {
+  if (!taskList) return;
+
   taskList.addEventListener('click', event => {
     const button = event.target.closest('button[data-action]');
     if (!button) return;
@@ -1255,6 +1892,8 @@ function registerTaskActions() {
 }
 
 function registerProjectActions() {
+  if (!projectGrid) return;
+
   projectGrid.addEventListener('click', event => {
     const button = event.target.closest('button[data-project-action]');
     if (!button) return;
@@ -1315,59 +1954,138 @@ function bindProjectModal() {
 }
 
 function bindTopActions() {
-  taskFilter.addEventListener('change', event => {
-    state.filter = event.target.value;
-    renderTasks();
-  });
+  if (taskFilter) {
+    taskFilter.addEventListener('change', event => {
+      state.filter = event.target.value;
+      renderTasks();
+    });
+  }
 
-  document.getElementById('start-day').addEventListener('click', () => {
-    document.getElementById('tasks').scrollIntoView({ behavior: 'smooth' });
-  });
+  const startDayBtn = document.getElementById('start-day');
+  if (startDayBtn) {
+    startDayBtn.addEventListener('click', () => {
+      const tasksSection = document.getElementById('tasks');
+      if (tasksSection) {
+        tasksSection.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+      window.location.href = './index.html#tasks';
+    });
+  }
 
-  document.getElementById('jump-zeni').addEventListener('click', () => {
-    document.getElementById('zeni').scrollIntoView({ behavior: 'smooth' });
-  });
+  const jumpZeniBtn = document.getElementById('jump-zeni');
+  if (jumpZeniBtn) {
+    jumpZeniBtn.addEventListener('click', () => {
+      const zeniSection = document.getElementById('zeni');
+      if (zeniSection) {
+        zeniSection.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+      window.location.href = './zeni.html#zeni';
+    });
+  }
 
-  document.getElementById('refresh-insights').addEventListener('click', () => {
-    renderZeni();
-  });
+  const refreshInsightsBtn = document.getElementById('refresh-insights');
+  if (refreshInsightsBtn) {
+    refreshInsightsBtn.addEventListener('click', () => {
+      renderZeni();
+    });
+  }
 
-  document.getElementById('accept-plan').addEventListener('click', () => {
-    state.habits.acceptedPlans += 1;
-    saveHabits();
-    renderZeni();
-    renderAnalytics();
-  });
+  const acceptPlanBtn = document.getElementById('accept-plan');
+  if (acceptPlanBtn) {
+    acceptPlanBtn.addEventListener('click', () => {
+      state.habits.acceptedPlans += 1;
+      saveHabits();
+      renderZeni();
+      renderAnalytics();
+    });
+  }
 
-  focusToggle.addEventListener('click', () => {
-    setFocusMode(!state.focus.active);
-  });
+  if (focusToggle) {
+    focusToggle.addEventListener('click', () => {
+      setFocusMode(!state.focus.active);
+    });
+  }
 
-  aiPrioritizeBtn.addEventListener('click', () => {
-    state.sortMode = 'ai';
-    renderTasks();
-    appendChatMessage('bot', 'Zeni reprioritized tasks using urgency and effort scoring.');
-  });
+  if (zeniReviewDeadlinesBtn) {
+    zeniReviewDeadlinesBtn.addEventListener('click', () => {
+      document.getElementById('calendar').scrollIntoView({ behavior: 'smooth' });
+      if (zeniChatPanel.classList.contains('hidden')) openZeniChat();
+      appendChatMessage('bot', getZeniResponse('What is due this week?'));
+    });
+  }
 
-  nlTaskAdd.addEventListener('click', () => {
-    const parsed = parseNaturalLanguageTask(nlTaskInput.value);
-    if (!parsed) return;
-    const task = addTaskRecord(parsed);
-    nlTaskInput.value = '';
-    renderAll();
-    appendChatMessage('bot', `Task added: ${task.title} (${task.priority}) due ${formatDate(task.dueDate)}.`);
-  });
+  if (zeniStartFocusBtn) {
+    zeniStartFocusBtn.addEventListener('click', () => {
+      if (!state.focus.active) {
+        setFocusMode(true);
+      }
+      document.getElementById('tasks').scrollIntoView({ behavior: 'smooth' });
+    });
+  }
 
-  nlTaskInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      nlTaskAdd.click();
-    }
-  });
+  if (zeniAddTaskBtn) {
+    zeniAddTaskBtn.addEventListener('click', () => {
+      document.getElementById('tasks').scrollIntoView({ behavior: 'smooth' });
+      nlTaskInput.focus();
+    });
+  }
 
-  addProjectBtn.addEventListener('click', addProject);
-  removeProjectBtn.addEventListener('click', removeProject);
-  addDeadlineBtn.addEventListener('click', addDeadline);
+  if (aiPrioritizeBtn) {
+    aiPrioritizeBtn.addEventListener('click', () => {
+      state.sortMode = 'ai';
+      renderTasks();
+      renderTimeline();
+      appendChatMessage('bot', 'Zeni reprioritized tasks using urgency and effort scoring.');
+    });
+  }
+
+  if (nlTaskAdd && nlTaskInput) {
+    nlTaskAdd.addEventListener('click', () => {
+      const parsed = parseNaturalLanguageTask(nlTaskInput.value);
+      if (!parsed) return;
+      const task = addTaskRecord(parsed);
+      nlTaskInput.value = '';
+      renderAll();
+      appendChatMessage('bot', `Task added: ${task.title} (${task.priority}) due ${formatDate(task.dueDate)}.`);
+    });
+
+    nlTaskInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        nlTaskAdd.click();
+      }
+    });
+  }
+
+  if (timelineAddTaskBtn) {
+    timelineAddTaskBtn.addEventListener('click', () => {
+      openTimelineTaskModal();
+    });
+  }
+
+  if (zeniQuickSubmit && zeniQuickInput) {
+    const submitQuickPrompt = () => {
+      const prompt = String(zeniQuickInput.value || '').trim();
+      if (!prompt) return;
+      if (zeniChatPanel.classList.contains('hidden')) openZeniChat();
+      submitZeniQuestion(prompt);
+      zeniQuickInput.value = '';
+    };
+
+    zeniQuickSubmit.addEventListener('click', submitQuickPrompt);
+    zeniQuickInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        submitQuickPrompt();
+      }
+    });
+  }
+
+  if (addProjectBtn) addProjectBtn.addEventListener('click', addProject);
+  if (removeProjectBtn) removeProjectBtn.addEventListener('click', removeProject);
+  if (addDeadlineBtn) addDeadlineBtn.addEventListener('click', addDeadline);
 }
 
 function renderAll() {
@@ -1375,6 +2093,8 @@ function renderAll() {
   renderProjects();
   renderTasks();
   renderCalendar();
+  renderTimeline();
+  renderRiskAlert();
   renderAnalytics();
   renderZeni();
   renderZeniNotifications();
@@ -1388,5 +2108,9 @@ registerDeadlineActions();
 registerProjectActions();
 bindPreviewModal();
 bindProjectModal();
+bindTimelineTaskModal();
+bindTimelineTaskDetailModal();
 bindZeniChat();
+bindTimelineInteractions();
+bindCalendarInteractions();
 renderAll();
